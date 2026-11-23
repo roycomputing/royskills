@@ -38,16 +38,20 @@ message "You are in the $target." "" \
   "Choosing yes installs Tailscale here if needed and starts it now and after each reboot. You'll sign in through your browser if this $kind needs to join a network. If it's already signed in, it will use its current network." "" \
   "The local user roy will be able to manage Tailscale without sudo."
 
-while true; do
-  message "Install and connect Tailscale on this $kind? [yes/no, default no]"
-  printf '    > '
-  if ! read -r answer; then answer=no; fi
-  case "${answer,,}" in
-    yes|y) break ;;
-    no|n|'') message 'Cancelled. No changes made.'; exit 0 ;;
-    *) message 'Please type yes or no, then press Enter.' ;;
-  esac
-done
+message "Install and connect Tailscale on this $kind?" \
+  'Click Yes or No, or use the arrow keys and press Enter.'
+answer=$(printf '%s\n' Yes No | FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= fzf \
+  --sync --height=2 --layout=reverse --no-input --bind='left-click:accept') || {
+  if (( $? != 130 )); then
+    message 'Could not open the confirmation menu. This skill needs fzf in an interactive terminal.' >&2
+    exit 1
+  fi
+  answer=No
+}
+if [[ $answer != Yes ]]; then
+  message 'Cancelled. No changes made.'
+  exit 0
+fi
 
 as_root=()
 if (( EUID != 0 )); then as_root=(sudo); fi
