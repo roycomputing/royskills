@@ -5,26 +5,36 @@ if [[ -t 1 && ${TERM:-dumb} != dumb ]]; then
   printf '\033[2J\033[H'
 fi
 
-# Only RoySkill messages go through this function. Commands write directly to the terminal.
+# Leave each fzf panel in scrollback without waiting for a keypress.
 message() {
-  local width=68 size columns line background='' reset=''
-  if [[ -t 1 && ${TERM:-dumb} != dumb ]]; then
-    if size=$(stty size 2>/dev/null); then
-      columns=${size##* }
-      if (( columns > 8 && columns < width + 8 )); then width=$((columns - 8)); fi
-    fi
-    if [[ -z ${NO_COLOR:-} ]]; then
-      background=$'\033[97;48;5;24m'
-      reset=$'\033[0m'
-    fi
+  local rows columns height color='bg:24,bg+:24,fg:15,fg+:15,border:39,label:15'
+  local -a lines
+  if [[ ! -t 1 || ${TERM:-dumb} == dumb ]] || ! read -r rows columns < <(stty size </dev/tty) || (( columns < 12 )); then
+    printf '%s\n' "$@"
+    return
   fi
 
-  printf '\n'
-  printf '%s\n' "$@" | fmt -s -w "$width" | while IFS= read -r line; do
-    printf '  %s %-*s %s\n' "$background" "$width" "$line" "$reset"
-  done
-  printf '\n'
+  mapfile -t lines < <(printf '%s\n' "$@" | fold -s -w "$((columns - 8))")
+  height=$((${#lines[@]} + 2))
+  if (( height >= rows )); then
+    printf '%s\n' "${lines[@]}"
+    printf '\n'
+    return
+  fi
+  if [[ -n ${NO_COLOR:-} ]]; then color=bw; fi
+  printf '%s\n' "${lines[@]}" | FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= fzf \
+    --sync --layout=reverse --no-input --height="$height" --margin=0,1 --border=rounded \
+    --border-label=' RoySkill · Tailscale ' --border-label-pos=3 --color="$color" \
+    --pointer='' --no-scrollbar --no-clear --bind='load:accept' >/dev/null
+  # fzf leaves the cursor at the panel's top edge.
+  tput cud "$((height - 1))"
+  printf '\n\n'
 }
+
+if ! command -v fzf >/dev/null; then
+  printf 'This skill needs fzf to display its instructions.\n' >&2
+  exit 1
+fi
 
 case "${ROYCOMPUTING_IS_HOST:-}" in
   true) kind="host computer" ;;
@@ -43,7 +53,7 @@ message "Install and connect Tailscale on this $kind?" \
 answer=$(printf '%s\n' Yes No | FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= fzf \
   --sync --height=2 --layout=reverse --no-input --bind='left-click:accept') || {
   if (( $? != 130 )); then
-    message 'Could not open the confirmation menu. This skill needs fzf in an interactive terminal.' >&2
+    printf 'Could not open the confirmation menu. This skill needs fzf in an interactive terminal.\n' >&2
     exit 1
   fi
   answer=No
@@ -102,5 +112,5 @@ if address=$(tailscale ip -1); then
   message "The private Tailscale address for this $kind is $address." "" \
     'To test the connection from your own computer, run' "tailscale ping $address"
 fi
-message 'You can also find this device on your Tailscale Machines page.' \
-  'https://login.tailscale.com/admin/machines'
+message 'You can also find this device on your Tailscale Machines page.'
+printf '%s\n' 'https://login.tailscale.com/admin/machines'
