@@ -50,8 +50,10 @@ message "You are in the $target." "" \
 
 message "Install and connect Tailscale on this $kind?" \
   'Click Yes or No, or use the arrow keys and press Enter.'
-answer=$(printf '%s\n' Yes No | FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= fzf \
-  --sync --height=2 --layout=reverse --no-input --bind='left-click:accept') || {
+# The padding rows belong to each choice, so clicking them also selects it.
+answer=$(printf ' \n%s\n \0' Yes No | FZF_DEFAULT_OPTS= FZF_DEFAULT_OPTS_FILE= fzf \
+  --read0 --delimiter=$'\n' --accept-nth=2 --sync --height=6 --layout=reverse \
+  --no-input --no-scrollbar --highlight-line --bind='left-click:accept,left:up,right:down') || {
   if (( $? != 130 )); then
     printf 'Could not open the confirmation menu. This skill needs fzf in an interactive terminal.\n' >&2
     exit 1
